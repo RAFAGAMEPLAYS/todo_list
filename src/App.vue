@@ -1,82 +1,130 @@
-<template>
-  <div>
-    <h1>To-Do List</h1>
-
-   
-    <input v-model="novaTarefa" placeholder="Digite uma tarefa" />
-    <button @click="adicionar">Adicionar</button>
-
-    
-    <div>
-      <button @click="ordenarAZ">A-Z</button>
-      <button @click="ordenarZA">Z-A</button>
-    </div>
-
-   
-    <ul>
-      <li v-for="(tarefa, index) in tarefas" :key="index">
-
-        <!-- CHECK -->
-        <input type="checkbox" v-model="tarefa.concluido" />
-
-       
-        <span v-if="editandoIndex !== index"
-              :style="{ textDecoration: tarefa.concluido ? 'line-through' : 'none' }">
-          {{ tarefa.texto }}
-        </span>
-
-        <input v-else v-model="tarefa.texto" />
-
-        
-        <button @click="editar(index)">
-          {{ editandoIndex === index ? 'Salvar' : 'Editar' }}
-        </button>
-
-        <button @click="remover(index)">deletar</button>
-      </li>
-    </ul>
-  </div>
-</template>
-
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue';
+import TarefaItem from './components/TarefaItem.vue';
 
-const novaTarefa = ref("")
-const tarefas = ref([])
-const editandoIndex = ref(null)
+const tarefas = ref([
+  { id: 1, texto: 'Comprar leite', status: 'pendente' },
+  { id: 2, texto: 'Estudar Vue.js', status: 'pendente' },
+  { id: 3, texto: 'Fazer exercícios', status: 'pendente' }
+]);
 
+const novaTarefa = ref('');
+const alteracao = ref(-1);
+const filtro = ref('');
+const tarefasExcluidas = ref([]);
 
-function adicionar() {
-  if (novaTarefa.value.trim() === "") return
-
-  tarefas.value.push({
-    texto: novaTarefa.value,
-    concluido: false
-  })
-
-  novaTarefa.value = ""
-}
-
-
-function remover(index) {
-  tarefas.value.splice(index, 1)
-}
-
-
-function editar(index) {
-  if (editandoIndex.value === index) {
-    editandoIndex.value = null
-  } else {
-    editandoIndex.value = index
+function adicionarTarefa() {
+  if (novaTarefa.value.trim().length >= 5) {
+    if (alteracao.value >= 0) {
+      tarefas.value[alteracao.value].texto = novaTarefa.value;
+      alteracao.value = -1;
+    }
+    else {
+      tarefas.value.push({
+        id: Math.max(...tarefas.value.map(t => t.id)) + 1,
+        texto: novaTarefa.value,
+        status: 'pendente'
+      });
+    }
+    novaTarefa.value = '';
   }
 }
 
-
-function ordenarAZ() {
-  tarefas.value.sort((a, b) => a.texto.localeCompare(b.texto))
+function excluirTarefa(id) {
+  const posicao = tarefas.value.findIndex(t => t.id === id);
+  tarefasExcluidas.value.push(tarefas.value[posicao]);
+  tarefas.value.splice(posicao, 1);
 }
 
-function ordenarZA() {
-  tarefas.value.sort((a, b) => b.texto.localeCompare(a.texto))
+function editarTarefa(id) {
+  const posicao = tarefas.value.findIndex(t => t.id === id);
+  novaTarefa.value = tarefas.value[posicao].texto;
+  alteracao.value = posicao;
 }
+
+function marcarConcluida(id) {
+  const posicao = tarefas.value.findIndex(t => t.id === id);
+  tarefas.value[posicao].status = tarefas.value[posicao].status === 'pendente' ? 'concluida' : 'pendente';
+}
+
+function ordenarTarefas() {
+  tarefas.value.sort((a, b) => a.texto.localeCompare(b.texto, 'pt-BR'));
+}
+
+function recuperarTarefa() {
+  if (tarefasExcluidas.value.length > 0) {
+    const tarefaRecuperada = tarefasExcluidas.value.pop();
+    tarefas.value.push(tarefaRecuperada);
+  }
+}
+
+const tarefasFiltradas = computed(() => {
+  return tarefas.value.filter(t => t.texto.toLowerCase().includes(filtro.value.toLowerCase()));
+});
+
+const tarefasConcluidas = computed(() => {
+  return tarefas.value.filter(t => t.status === 'concluida').length;
+});
 </script>
+
+<template>
+  <div class="container">
+    <h1>To-Do List</h1>
+    <form @submit.prevent="adicionarTarefa">
+      <input
+        v-model="novaTarefa"
+        type="text"
+        placeholder="Digite uma nova tarefa..."
+        @keyup.enter="adicionarTarefa"
+      />
+      <button type="submit">{{ alteracao >= 0 ? 'Salvar' : 'Adicionar' }}</button>
+    </form>
+    <ul>
+      <TarefaItem
+        v-for="tarefa in tarefasFiltradas"
+        :key="tarefa.id"
+        :id="tarefa.id"
+        :texto="tarefa.texto"
+        :status="tarefa.status"
+        @marcarConcluida="marcarConcluida"
+        @excluirTarefa="excluirTarefa"
+        @editarTarefa="editarTarefa"
+      />
+    </ul>
+    <div>
+      <p class="countDone">Tarefas concluídas: {{ tarefasConcluidas }} de {{ tarefas.length }}</p>
+    </div>
+    <div>
+      <input type="text" v-model="filtro" placeholder="Filtrar tarefas..." />
+    </div>
+    <div>
+      <button @click="ordenarTarefas">Ordenar</button>
+      <button :disabled="tarefasExcluidas.length == 0" @click="recuperarTarefa">Recuperar Tarefa</button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+form {
+  margin-bottom: 1rem;
+}
+
+input {
+  padding: 0.5rem;
+  margin-right: 0.5rem;
+}
+
+button {
+  padding: 0.5rem 1rem;
+}
+
+.countDone {
+  font-weight: bold;
+  font-size: smaller;
+}
+</style>
